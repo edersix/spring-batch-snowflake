@@ -1,0 +1,124 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: order-status-batch
+  namespace: your-namespace
+  labels:
+    app: order-status-batch
+    component: batch-job
+spec:
+  # Run daily at 2 AM
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid  # Prevent concurrent executions
+  jobTemplate:
+    spec:
+      backoffLimit: 2  # Retry failed jobs twice
+      template:
+        metadata:
+          labels:
+            app: order-status-batch
+            component: batch-job
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: order-status-batch-sa
+          
+          containers:
+          - name: batch-app
+            image: your-registry/order-status-batch:latest
+            imagePullPolicy: Always
+            
+            env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "production"
+            - name: JAVA_OPTS
+              value: "-Xmx512m -Xms256m -XX:+UseG1GC"
+            
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+            
+            volumeMounts:
+            # Vault secrets mounted as properties file
+            - name: vault-secrets
+              mountPath: /var/secrets
+              readOnly: true
+            
+            # Input data directory (PVC or ConfigMap)
+            - name: input-data
+              mountPath: /data
+              readOnly: true
+            
+            # Liveness probe (optional, for long-running batches)
+            livenessProbe:
+              httpGet:
+                path: /actuator/health
+                port: 8080
+              initialDelaySeconds: 60
+              periodSeconds: 30
+              timeoutSeconds: 5
+              failureThreshold: 3
+          
+          volumes:
+          # Secret containing vault-secrets.properties
+          # This is mounted by your secret manager
+          - name: vault-secrets
+            secret:
+              secretName: vault-secrets
+              items:
+              - key: vault-secrets.properties
+                path: vault-secrets.properties
+          
+          # PVC for input files
+          - name: input-data
+            persistentVolumeClaim:
+              claimName: order-files-pvc
+              readOnly: true
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: order-status-batch-sa
+  namespace: your-namespace
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: order-files-pvc
+  namespace: your-namespace
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: your-storage-class
+
+---
+# Example Secret structure (managed by your secret manager)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-secrets
+  namespace: your-namespace
+type: Opaque
+stringData:
+  vault-secrets.properties: |
+    snowflake.url=jdbc:snowflake://dev.east.company.com/?warehouse=BT_WT&db=SSFF&schema=MY_SCM
+    snowflake.username=myuser
+    snowflake.passphrase=your-encrypted-passphrase
+    key.1=-----BEGIN ENCRYPTED PRIVATE KEY-----
+    key.2=MIIFHDBOBgkqhkiG9w0BBQ0wQTApBgkqhkiG9w0BBQwwHAQI...
+    key.3=...
+    key.N=-----END ENCRYPTED PRIVATE KEY-----
+    snowflake.private-key-path=/var/secrets/snowflake_key.p8
+    batch.input.file-path=/data/orders.txt
+
+# Made with Bob
