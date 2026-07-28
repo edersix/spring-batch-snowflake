@@ -1,0 +1,31 @@
+﻿# Build output
+build/
+bin/
+
+# Gradle wrapper cache
+.gradle/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Spring Boot
+*.jar
+*.war
+*.ear
+
+# Logs
+*.log
+
+# Secrets -- never commit credentials
+vault-secrets.properties
+*.p8
+*.pem
+*.key

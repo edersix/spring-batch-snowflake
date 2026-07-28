@@ -60,6 +60,7 @@ class WarehouseConfigTest {
         ReflectionTestUtils.setField(config, "connectionTimeout", 30_000L);
         ReflectionTestUtils.setField(config, "idleTimeout", 600_000L);
         ReflectionTestUtils.setField(config, "maxLifetime", 1_800_000L);
+        ReflectionTestUtils.setField(config, "jdbcBatchSize", 100);
     }
 
     /**
@@ -210,6 +211,60 @@ class WarehouseConfigTest {
                 config.snowflakeEntityManagerFactory(mockDs);
 
         assertThat(em.getDataSource()).isSameAs(mockDs);
+    }
+
+    @Test
+    void snowflakeEntityManagerFactory_scansSnowflakeEntityPackage() {
+        LocalContainerEntityManagerFactoryBean em =
+                config.snowflakeEntityManagerFactory(mock(DataSource.class));
+
+        // LocalContainerEntityManagerFactoryBean delegates setPackagesToScan() to its
+        // internal DefaultPersistenceUnitManager — traverse that field chain via
+        // ReflectionTestUtils so we don't need a full Spring context.
+        Object pum = ReflectionTestUtils.getField(em, "internalPersistenceUnitManager");
+        String[] packages = (String[]) ReflectionTestUtils.getField(pum, "packagesToScan");
+        assertThat(packages).containsExactly("com.company.batch.entity.snowflake");
+    }
+
+    @Test
+    void snowflakeEntityManagerFactory_doesNotHardcodeDialect() {
+        LocalContainerEntityManagerFactoryBean em =
+                config.snowflakeEntityManagerFactory(mock(DataSource.class));
+
+        // Dialect must be auto-detected by Hibernate's DialectResolver;
+        // hard-coding PostgreSQLDialect produces subtly wrong SQL for Snowflake.
+        assertThat(em.getJpaPropertyMap())
+                .doesNotContainKey("hibernate.dialect");
+    }
+
+    @Test
+    void snowflakeEntityManagerFactory_batchSizeMatchesChunkSize() {
+        ReflectionTestUtils.setField(config, "jdbcBatchSize", 250);
+
+        LocalContainerEntityManagerFactoryBean em =
+                config.snowflakeEntityManagerFactory(mock(DataSource.class));
+
+        assertThat(em.getJpaPropertyMap())
+                .containsEntry("hibernate.jdbc.batch_size", "250");
+    }
+
+    @Test
+    void snowflakeEntityManagerFactory_enablesBatchOrdering() {
+        LocalContainerEntityManagerFactoryBean em =
+                config.snowflakeEntityManagerFactory(mock(DataSource.class));
+
+        assertThat(em.getJpaPropertyMap())
+                .containsEntry("hibernate.order_inserts", "true")
+                .containsEntry("hibernate.order_updates", "true");
+    }
+
+    @Test
+    void snowflakeEntityManagerFactory_ddlAutoIsNone() {
+        LocalContainerEntityManagerFactoryBean em =
+                config.snowflakeEntityManagerFactory(mock(DataSource.class));
+
+        assertThat(em.getJpaPropertyMap())
+                .containsEntry("hibernate.hbm2ddl.auto", "none");
     }
 
     // -------------------------------------------------------------------------

@@ -70,6 +70,9 @@ public class WarehouseConfig {
     @Value("${spring.datasource.snowflake.pool.max-lifetime:1800000}")
     private long maxLifetime;
 
+    @Value("${batch.chunk-size:100}")
+    private int jdbcBatchSize;
+
     /**
      * Configure Snowflake DataSource with Key Pair authentication wrapped in HikariCP.
      *
@@ -136,18 +139,19 @@ public class WarehouseConfig {
         
         // Hibernate properties for Snowflake
         Properties properties = new Properties();
-        
-        // Don't auto-create schema (Snowflake tables should exist)
+
+        // Don't auto-create schema (Snowflake tables must already exist)
         properties.setProperty("hibernate.hbm2ddl.auto", "none");
-        
-        // Use Snowflake dialect (or generic SQL dialect)
-        properties.setProperty("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
-        
-        // Batch insert optimization
-        properties.setProperty("hibernate.jdbc.batch_size", "100");
+
+        // Let Hibernate auto-detect the dialect via DialectResolver.
+        // Snowflake has no dedicated Hibernate 6 dialect; hard-coding
+        // PostgreSQLDialect can produce subtly wrong SQL for Snowflake types.
+
+        // Batch insert optimization — kept in sync with batch.chunk-size
+        properties.setProperty("hibernate.jdbc.batch_size", String.valueOf(jdbcBatchSize));
         properties.setProperty("hibernate.order_inserts", "true");
         properties.setProperty("hibernate.order_updates", "true");
-        
+
         // Show SQL for debugging (disable in production)
         properties.setProperty("hibernate.show_sql", "false");
         properties.setProperty("hibernate.format_sql", "false");
