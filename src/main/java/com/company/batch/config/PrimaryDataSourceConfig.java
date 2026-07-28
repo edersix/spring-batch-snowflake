@@ -34,6 +34,9 @@ import java.util.Properties;
     transactionManagerRef = "primaryTransactionManager"
 )
 public class PrimaryDataSourceConfig {
+
+    @org.springframework.beans.factory.annotation.Value("${spring.jpa.hibernate.ddl-auto:none}")
+    private String ddlAuto;
     
     /**
      * Primary datasource properties from application.yml
@@ -78,7 +81,7 @@ public class PrimaryDataSourceConfig {
         
         Properties properties = new Properties();
         // Spring Batch schema is initialised by spring.batch.jdbc.initialize-schema=always (JDBC)
-        properties.setProperty("hibernate.hbm2ddl.auto", "none");
+        properties.setProperty("hibernate.hbm2ddl.auto", ddlAuto);
         properties.setProperty("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
         properties.setProperty("hibernate.show_sql", "false");
         
